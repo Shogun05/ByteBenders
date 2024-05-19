@@ -90,6 +90,8 @@ if __name__=="__main__":
         st.success("User verified! Welcome!")
 
         #implementing decision trees
+        #largely inspired by: https://github.com/alicenkbaytop/German-Credit-Risk-Classification
+        #on the same dataset
         dataf = pd.read_csv("german_credit_data.csv", index_col=0)
         dataf.head()
         #new_row = pd.DataFrame(values)
@@ -114,7 +116,7 @@ if __name__=="__main__":
 
         dataf["Sex"].value_counts(normalize=True)
         labels = ("student", "young", "adult", "senior")
-        groups = pd.cut(dataf["Age"], labels=labels, bins=(18, 25, 35, 60, 120), ordered=True)
+        groups = pd.cut(dataf["Age"], labels=labels, bins=(18, 24, 30, 60, 120), ordered=True)
         dataf["Age group"] = groups
 
         dataf["Age_gt_median"] = dataf["Age"].map(lambda x: (x >= dataf["Age"].median()).astype(int))
@@ -122,7 +124,7 @@ if __name__=="__main__":
         dataf["Credit_amount_gt_median"] = dataf["Credit amount"].map(lambda x: (x >= dataf["Credit amount"].median()).astype(int))
         df_pre = dataf.copy()
 
-        def get_outliers(df, feature, iqr_threshold=1.5):
+        def get_outliers(df, feature, iqr_threshold=1.35):
             q1 = np.percentile(df[feature], 25)
             q3 = np.percentile(df[feature], 75)
             iqr = q3 - q1
@@ -139,7 +141,7 @@ if __name__=="__main__":
 
         df_pre = dataf.drop(onehot_features, axis=1)
         df_pre = pd.concat((df_pre, df_onehot), axis=1)
-
+        
         df_pre["Risk_bad"] = (df_pre["Risk_good"] + 1) % 2
         df_pre.drop(["Risk_good"], axis=1, inplace=True)
 
@@ -151,11 +153,11 @@ if __name__=="__main__":
 
         X = df_pre.drop("Risk_bad", axis=1)
         y = df_pre["Risk_bad"]
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42)
+            
         model = DecisionTreeClassifier(random_state=240)
         scoring = "recall"
-        kfold = StratifiedKFold(n_splits=10, shuffle=True, random_state=42)
+        kfold = StratifiedKFold(n_splits=10,  random_state=42,shuffle=True)
         _scores = cross_val_score(model, X_train, y_train, scoring=scoring, cv=kfold, n_jobs=-1)
 
         msg = "%s has an average score of %.3f ± %.3f" % ("CART", np.mean(_scores), np.std(_scores))
@@ -165,7 +167,7 @@ if __name__=="__main__":
         scores_df = pd.melt(scores_df, id_vars=["model"], value_vars=np.arange(0, 10)).rename(columns=dict(variable="fold", value="score"))
 
         model = DecisionTreeClassifier(random_state=240)
-        gscv = GridSearchCV(
+        gridSearch = GridSearchCV(
             model,
             param_grid={
                 "criterion": ["gini", "entropy", "log_loss"],
@@ -177,8 +179,8 @@ if __name__=="__main__":
             cv=kfold,
             n_jobs=-1
         )
-        gscv.fit(X_train, y_train)
-        model = gscv.best_estimator_
+        gridSearch.fit(X_train, y_train)
+        model = gridSearch.best_estimator_
         probas = model.predict(X_test)
 
         if not probas[0]:
